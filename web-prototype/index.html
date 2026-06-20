@@ -21,6 +21,19 @@
         <!-- Leaflet Map (Fills 100% space as the foundation) -->
         <div id="map"></div>
 
+        <!-- Transparent Location Permission Dialog Overlay -->
+        <div class="permission-overlay-container" id="location-permission-modal">
+            <div class="permission-card glass">
+                <div class="permission-icon">📍</div>
+                <h2>See What’s Happening Around You</h2>
+                <p>Verity uses your location to show the live state of nearby public places and verify locations you’ve actually visited. Your precise location is never shared publicly.</p>
+                <div class="permission-actions">
+                    <button class="btn-allow" onclick="acceptLocationPermission()">Allow</button>
+                    <button class="btn-not-now" onclick="denyLocationPermission()">Not Now</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Apple-quality Dynamic Island Notification -->
         <div id="dynamic-island" class="dynamic-island-collapsed" onclick="expandDynamicIsland()">
             <div class="island-content">
@@ -125,7 +138,21 @@
                     </div>
                 </div>
                 
-                <!-- Notification / Settings configuration toggles -->
+                <!-- Privacy & Location controls -->
+                <div class="profile-divider"></div>
+                <div class="privacy-settings">
+                    <h4>Privacy & Location Settings</h4>
+                    <div class="settings-control">
+                        <label class="toggle-control">
+                            <input type="checkbox" id="privacy-bg-location" checked onchange="toggleBackgroundLocation()">
+                            <span>Background Verification</span>
+                        </label>
+                    </div>
+                    <div class="settings-control" style="margin-top: 10px;">
+                        <button class="btn-form-submit" style="background: rgba(239, 68, 68, 0.15); color: var(--state-issue); margin-top: 6px;" onclick="clearLocationHistory()">Delete Location History</button>
+                    </div>
+                </div>
+
                 <div class="profile-divider"></div>
                 <div class="reflection-settings">
                     <h4>Reflection Settings</h4>
@@ -181,9 +208,9 @@
         <!-- Floating Simulation Command Center (Top-Right HUD) -->
         <div class="simulation-hud glass">
             <span class="hud-tag">SIMULATION CONTROL</span>
-            <button class="btn-simulation" onclick="triggerGeofenceExit()">⚡ Simulate Geofence Exit (SFO)</button>
+            <button class="btn-simulation" onclick="triggerGeofenceExit()">⚡ Simulate Geofence Exit (EA)</button>
             <div class="hud-info">
-                <span>Active Nodes: <strong class="text-cyan" id="hud-nodes-count">3</strong></span>
+                <span>Active Nodes: <strong class="text-cyan" id="hud-nodes-count">4</strong></span>
                 <span>Active Ranks: <strong class="text-cyan">Nearby</strong></span>
             </div>
         </div>

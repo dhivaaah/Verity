@@ -109,7 +109,6 @@ let places = [
     }
 ];
 
-// Configuration definitions for India categories
 const updateOptions = {
     "Cafe": ["WiFi Down", "No Seats", "AC Not Working", "Closed"],
     "Mall": ["Parking Full", "Crowded Entrance", "Escalator Offline", "Closed"],
@@ -125,10 +124,7 @@ let map;
 let markers = {};
 let contributorMarkers = [];
 let selectedPlaceId = "p1";
-let currentViewMode = "places"; // "places" or "leaderboard"
-
-// Mock Google Places API status
-let googlePlacesAPILoaded = true;
+let currentViewMode = "places"; 
 
 const leaderboardData = [
     { rank: 1, name: "glassatlas", level: "Lattice", signal: 24180, ring: "Aurora", lat: 12.9730, lng: 77.6425 },
@@ -143,7 +139,6 @@ window.addEventListener('DOMContentLoaded', () => {
     startDecayEngine();
     renderLeaderboard("Nearby");
     
-    // Set initial Signal values in DOM
     updateOdometer("profile-signal-val", veritySignal);
 });
 
@@ -154,13 +149,17 @@ function initMap() {
         attributionControl: false
     }).setView([12.9716, 77.6412], 15);
 
-    // Sleek premium CartoDB Dark map styling
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 20
     }).addTo(map);
 
     renderAllMarkers();
-    selectPlace("p1"); // Set default
+    selectPlace("p1"); 
+
+    // Setup map drag-listeners to support continuous place loading (discovery stream)
+    map.on('moveend', () => {
+        streamNearbyPlacesOnDrag();
+    });
 }
 
 function startDecayEngine() {
@@ -189,7 +188,7 @@ function getPlaceHealth(p) {
     if (c <= 10.0) {
         return {
             statusLabel: "UNDER MAINTENANCE",
-            desc: "Needs fresh check",
+            desc: "Needs First Community Check",
             colorClass: "inactive",
             hexColor: "#6b7280",
             badgeClass: "badge-inactive"
@@ -214,7 +213,6 @@ function getPlaceHealth(p) {
 }
 
 function renderAllMarkers() {
-    // Clear any contributor markers if in places mode
     if (currentViewMode === "places") {
         clearContributorMarkers();
         places.forEach(p => {
@@ -234,7 +232,6 @@ function renderAllMarkers() {
 
             if (markers[p.id]) {
                 markers[p.id].setIcon(customIcon);
-                // Ensure marker remains on map
                 if (!map.hasLayer(markers[p.id])) {
                     markers[p.id].addTo(map);
                 }
@@ -247,7 +244,6 @@ function renderAllMarkers() {
             }
         });
     } else {
-        // Leaderboard mode: hide places, show glowing contributors
         hidePlaceMarkers();
         renderContributorAvatarsOnMap();
     }
@@ -267,7 +263,6 @@ function clearContributorMarkers() {
 function renderContributorAvatarsOnMap() {
     clearContributorMarkers();
     leaderboardData.forEach(user => {
-        // Avatar marker with glowing aura
         const glowColor = user.ring === "Aurora" ? "#a855f7" : (user.ring === "Crystal" ? "#cbd5e1" : "#06b6d4");
         const iconHtml = `
             <div class="marker-pin-spatial" style="background: rgba(255,255,255,0.05); border: 2px solid ${glowColor}; box-shadow: 0 0 15px ${glowColor}; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
@@ -284,7 +279,6 @@ function renderContributorAvatarsOnMap() {
 
         const marker = L.marker([user.lat, user.lng], { icon: customIcon }).addTo(map);
         marker.on('click', () => {
-            // Display mini card inside search response box or console
             const responseBox = document.getElementById('search-response-box');
             const responseText = document.getElementById('search-response-text');
             responseText.innerHTML = `
@@ -304,17 +298,11 @@ function selectPlace(id) {
     const p = places.find(item => item.id === id);
     if (!p) return;
 
-    // Pan map smoothly to place
     map.panTo([p.lat, p.lng]);
-    
-    // Close other sheets
     closeAllSheets();
     
-    // Load content and slide up place sheet
     updatePlaceSheetDetails();
     document.getElementById('place-sheet').classList.add('active');
-    
-    // Set active tab on dock
     setDockActive('nav-search');
 }
 
@@ -327,7 +315,6 @@ function updatePlaceSheetDetails() {
     
     let nowHtml = "";
     Object.keys(p.capabilities).forEach(key => {
-        // Translate status flags into absolute uppercase tokens
         const val = p.capabilities[key].toUpperCase();
         nowHtml += `
             <div class="capability-row">
@@ -416,7 +403,6 @@ function triggerLooksGood(id, event) {
     p.confidence = 100.0;
     p.lastVerified = Date.now();
 
-    // Pulse signal score
     veritySignal += 10;
     updateOdometer("profile-signal-val", veritySignal);
     triggerVisualPulse();
@@ -447,7 +433,7 @@ function submitCorrections(id, event) {
         return;
     }
 
-    p.confidence = 65.0; // Drops to Checking
+    p.confidence = 65.0; 
     p.lastVerified = Date.now();
 
     checkedOptions.forEach(opt => {
@@ -484,7 +470,7 @@ function handleDockNav(tab) {
         document.getElementById('profile-sheet').classList.add('active');
     } else if (tab === 'leaderboard') {
         currentViewMode = "leaderboard";
-        renderAllMarkers(); // Re-render markers as glowing avatars
+        renderAllMarkers(); 
         document.getElementById('leaderboard-panel').classList.add('active');
     } else if (tab === 'search') {
         currentViewMode = "places";
@@ -518,18 +504,14 @@ function setDockActive(id) {
 function triggerGeofenceExit() {
     const island = document.getElementById('dynamic-island');
     island.className = "dynamic-island-expanded";
-    
-    // Simulate SFO details in the island header
     document.querySelector('.island-subtitle').textContent = "Just left Express Avenue? Was the parking full?";
     
-    // Setup dynamic island action click triggers
     document.querySelector('.btn-island-primary').onclick = (e) => {
         e.stopPropagation();
         veritySignal += 10;
         updateOdometer("profile-signal-val", veritySignal);
         triggerVisualPulse();
         
-        // Show success state inside dynamic island
         document.querySelector('.island-subtitle').textContent = "✓ Confirmations accepted. Thank you.";
         setTimeout(() => {
             dismissDynamicIsland();
@@ -569,7 +551,6 @@ function switchLeaderboardScope(scope) {
     event.target.classList.add('active');
     renderLeaderboard(scope);
     
-    // Adjust map markers relative to scope coordinates
     if (scope === 'Global' || scope === 'India') {
         map.setView([12.9716, 77.6412], 5);
     } else {
@@ -613,7 +594,6 @@ function searchCategory(cat) {
     if (target) {
         selectPlace(target.id);
     } else {
-        // Fallback: Simulate Google Places API metadata fetch
         simulateGooglePlacesFetch(cat);
     }
 }
@@ -678,6 +658,91 @@ function triggerSearch() {
 function clearSearch() {
     document.getElementById('conversational-search').value = "";
     document.getElementById('search-response-box').style.display = 'none';
+}
+
+// --- LOCATION PERMISSION FLOW & SETTINGS MOCKS ---
+function acceptLocationPermission() {
+    const modal = document.getElementById('location-permission-modal');
+    modal.style.display = 'none';
+    
+    // Zoom and locate user (simulated Chennai EA center grid)
+    map.setView([13.0587, 80.2641], 15);
+    selectPlace("p2");
+}
+
+function denyLocationPermission() {
+    const modal = document.getElementById('location-permission-modal');
+    modal.style.display = 'none';
+}
+
+function toggleBackgroundLocation() {
+    const isChecked = document.getElementById('privacy-bg-location').checked;
+    triggerVisualPulse();
+    
+    const banner = document.getElementById('search-response-box');
+    const text = document.getElementById('search-response-text');
+    text.innerHTML = `Privacy updated: Background Location verification is now <strong>${isChecked ? "ENABLED" : "DISABLED"}</strong>.`;
+    banner.style.display = 'block';
+}
+
+function clearLocationHistory() {
+    triggerVisualPulse();
+    const banner = document.getElementById('search-response-box');
+    const text = document.getElementById('search-response-text');
+    text.innerHTML = `✓ <strong>Location history deleted successfully.</strong> Your local presence history has been purged from Verity.`;
+    banner.style.display = 'block';
+}
+
+// --- CONTINUOUS PLACE DISCOVERY STREAMING ---
+function streamNearbyPlacesOnDrag() {
+    const bounds = map.getBounds();
+    const center = map.getCenter();
+    
+    // Simulate streaming dynamic public places near the center coordinate
+    // Only generate if we are in places view mode
+    if (currentViewMode !== "places") return;
+
+    // Check if place is already loaded within radius
+    const existingIndex = places.findIndex(p => Math.abs(p.lat - center.lat) < 0.002 && Math.abs(p.lng - center.lng) < 0.002);
+    if (existingIndex !== -1) return;
+
+    // Create a new simulated Google Place dynamically
+    const names = ["A2B Restaurant", "Indiranagar Metro Station", "SBI ATM Hub", "Government Library", "Apollo Pharmacy"];
+    const cats = ["Restaurant", "Metro Station", "ATM", "Library", "Pharmacy"];
+    const index = Math.floor(Math.random() * names.length);
+    
+    const newPlace = {
+        id: 'p_stream_' + Date.now(),
+        name: names[index],
+        category: cats[index],
+        locationDesc: "Simulated Place near current map center",
+        lat: center.lat + (Math.random() - 0.5) * 0.001,
+        lng: center.lng + (Math.random() - 0.5) * 0.001,
+        confidence: 0, // Freshly loaded, needs first community check
+        lastVerified: Date.now(),
+        halfLife: 45,
+        capabilities: {
+            operational: "OPEN",
+            status: "UNDER MAINTENANCE"
+        },
+        memoryStats: {
+            reliability: "Needs First Community Check",
+            totalUpdates: 0,
+            activeDays: 0,
+            peakCrowdTime: "Unknown"
+        },
+        patterns: ["No patterns verified yet"],
+        timeline: []
+    };
+
+    places.push(newPlace);
+    renderAllMarkers();
+    
+    // Toast notification overlay inside search response box
+    const nodeCount = document.getElementById('hud-nodes-count');
+    if (nodeCount) {
+        nodeCount.textContent = places.length;
+    }
 }
 
 // --- UTILITY EFFECTS & MICRO-HAPTICS ---
