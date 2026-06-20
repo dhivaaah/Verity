@@ -41,8 +41,9 @@ let places = [
         halfLife: 180,
         capabilities: {
             operational: "OPEN",
-            parking: "LIMITED",
-            crowd: "BUSY"
+            parking: "AVAILABLE",
+            crowd: "QUIET",
+            entrances: "OPEN"
         },
         memoryStats: {
             reliability: "98% of last 30 days",
@@ -123,15 +124,17 @@ let peopleHelped = 82412;
 let map;
 let markers = {};
 let contributorMarkers = [];
+let heatCircles = [];
+let userLocationMarker = null;
 let selectedPlaceId = "p1";
 let currentViewMode = "places"; 
 
 const leaderboardData = [
-    { rank: 1, name: "glassatlas", level: "Lattice", signal: 24180, ring: "Aurora", lat: 12.9730, lng: 77.6425 },
-    { rank: 2, name: "stilltrue", level: "Vector", signal: 19420, ring: "Crystal", lat: 12.9705, lng: 77.6398 },
-    { rank: 3, name: "dhiv_sentinel", level: "Prism", signal: 18420, ring: "Polar", lat: 12.9716, lng: 77.6412 },
-    { rank: 4, name: "northsignal", level: "Pulse", signal: 14800, ring: "Normal", lat: 12.9745, lng: 77.6438 },
-    { rank: 5, name: "quietpulse", level: "Trace", signal: 11200, ring: "Normal", lat: 12.9690, lng: 77.6375 }
+    { rank: 1, name: "glassatlas", level: "Lattice", signal: 24180, ring: "Aurora", lat: 13.0600, lng: 80.2660 },
+    { rank: 2, name: "stilltrue", level: "Vector", signal: 19420, ring: "Crystal", lat: 13.0570, lng: 80.2620 },
+    { rank: 3, name: "dhiv_sentinel", level: "Prism", signal: 18420, ring: "Polar", lat: 13.0587, lng: 80.2641 },
+    { rank: 4, name: "northsignal", level: "Pulse", signal: 14800, ring: "Normal", lat: 13.0620, lng: 80.2670 },
+    { rank: 5, name: "quietpulse", level: "Trace", signal: 11200, ring: "Normal", lat: 13.0550, lng: 80.2600 }
 ];
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -140,25 +143,30 @@ window.addEventListener('DOMContentLoaded', () => {
     renderLeaderboard("Nearby");
     
     updateOdometer("profile-signal-val", veritySignal);
+    setupSearchSuggestions();
 });
 
 function initMap() {
-    // Center map around Bangalore, Indiranagar (India First grid)
+    // Initial zoom centers around Southern India Grid view, showing clusters until location is granted
     map = L.map('map', {
         zoomControl: false,
         attributionControl: false
-    }).setView([12.9716, 77.6412], 15);
+    }).setView([13.0587, 80.2641], 10);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 20
     }).addTo(map);
 
     renderAllMarkers();
-    selectPlace("p1"); 
 
     // Setup map drag-listeners to support continuous place loading (discovery stream)
     map.on('moveend', () => {
         streamNearbyPlacesOnDrag();
+    });
+
+    // Zoom listener for spatial transitions (dissolving heat halos)
+    map.on('zoomend', () => {
+        renderAllMarkers();
     });
 }
 
@@ -213,8 +221,24 @@ function getPlaceHealth(p) {
 }
 
 function renderAllMarkers() {
-    if (currentViewMode === "places") {
-        clearContributorMarkers();
+    const zoom = map.getZoom();
+
+    // Clear everything first
+    clearContributorMarkers();
+    clearHeatCircles();
+    hidePlaceMarkers();
+
+    if (currentViewMode === "leaderboard") {
+        renderContributorAvatarsOnMap();
+        return;
+    }
+
+    // Zoom-dependent dissolving layout
+    if (zoom < 13) {
+        // Render regional activity heat halos instead of places
+        renderRegionalHeatHalos();
+    } else {
+        // Dissolve halos into individual glass orb markers
         places.forEach(p => {
             const health = getPlaceHealth(p);
             const iconHtml = `
@@ -243,9 +267,6 @@ function renderAllMarkers() {
                 markers[p.id] = marker;
             }
         });
-    } else {
-        hidePlaceMarkers();
-        renderContributorAvatarsOnMap();
     }
 }
 
@@ -258,6 +279,32 @@ function hidePlaceMarkers() {
 function clearContributorMarkers() {
     contributorMarkers.forEach(m => map.removeLayer(m));
     contributorMarkers = [];
+}
+
+function clearHeatCircles() {
+    heatCircles.forEach(c => map.removeLayer(c));
+    heatCircles = [];
+}
+
+function renderRegionalHeatHalos() {
+    // Group SFO grid and Chennai grid into 2 heat rings
+    const zones = [
+        { lat: 12.9716, lng: 77.6412, label: "Quiet Area", color: "#10b981" },
+        { lat: 13.0587, lng: 80.2641, label: "Activity Spike", color: "#ef4444" }
+    ];
+
+    zones.forEach(z => {
+        const circle = L.circle([z.lat, z.lng], {
+            color: z.color,
+            fillColor: z.color,
+            fillOpacity: 0.15,
+            radius: 2000,
+            weight: 1
+        }).addTo(map);
+
+        circle.bindTooltip(z.label, { permanent: true, direction: "center", className: "spatial-heat-tooltip" });
+        heatCircles.push(circle);
+    });
 }
 
 function renderContributorAvatarsOnMap() {
@@ -315,10 +362,14 @@ function updatePlaceSheetDetails() {
     
     let nowHtml = "";
     Object.keys(p.capabilities).forEach(key => {
+        // Clean status flags formatting: Green / Amber status flags
         const val = p.capabilities[key].toUpperCase();
+        let dot = "🟢";
+        if (val === "BUSY" || val === "LIMITED") dot = "🟡";
+        if (val === "FULL" || val === "CLOSED") dot = "🔴";
         nowHtml += `
-            <div class="capability-row">
-                <span>${key.toUpperCase()}</span>
+            <div class="capability-row" style="margin-bottom:10px;">
+                <span>${dot} ${key.toUpperCase()}</span>
                 <strong>${val}</strong>
             </div>
         `;
@@ -357,7 +408,7 @@ function updatePlaceSheetDetails() {
             ${health.desc}
         </div>
 
-        <div class="capabilities-list">
+        <div class="capabilities-list" style="margin: 20px 0;">
             ${nowHtml}
         </div>
 
@@ -479,7 +530,7 @@ function handleDockNav(tab) {
     } else if (tab === 'feed') {
         currentViewMode = "places";
         renderAllMarkers();
-        selectPlace("p1");
+        selectPlace("p2"); // Express Avenue (Home view)
     }
 }
 
@@ -552,9 +603,9 @@ function switchLeaderboardScope(scope) {
     renderLeaderboard(scope);
     
     if (scope === 'Global' || scope === 'India') {
-        map.setView([12.9716, 77.6412], 5);
+        map.setView([13.0587, 80.2641], 5);
     } else {
-        map.setView([12.9716, 77.6412], 14);
+        map.setView([13.0587, 80.2641], 15);
     }
     renderAllMarkers();
 }
@@ -588,7 +639,32 @@ function renderLeaderboard(scope) {
     }).join('');
 }
 
-// --- SEARCH ENGINE INTERFACE ---
+// --- Spotlight search suggestions setup ---
+function setupSearchSuggestions() {
+    const input = document.getElementById('conversational-search');
+    input.addEventListener('focus', () => {
+        const responseBox = document.getElementById('search-response-box');
+        const responseText = document.getElementById('search-response-text');
+        
+        responseText.innerHTML = `
+            <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Recent Searches</div>
+            <div style="cursor:pointer; margin-bottom:6px;" onclick="searchQuery('Is Express Avenue crowded?')">🔍 Is Express Avenue crowded?</div>
+            <div style="cursor:pointer; margin-bottom:12px;" onclick="searchQuery('Working ATM nearby')">🔍 Working ATM nearby</div>
+            
+            <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Nearby & Trending</div>
+            <div style="cursor:pointer; margin-bottom:6px;" onclick="searchQuery('Marina Beach')">🏖 Marina Beach</div>
+            <div style="cursor:pointer;" onclick="searchQuery('Brew Cafe')">☕ Brew Cafe</div>
+        `;
+        responseBox.style.display = 'block';
+    });
+}
+
+function searchQuery(val) {
+    const input = document.getElementById('conversational-search');
+    input.value = val;
+    triggerSearch();
+}
+
 function searchCategory(cat) {
     const target = places.find(p => p.category === cat);
     if (target) {
@@ -665,14 +741,34 @@ function acceptLocationPermission() {
     const modal = document.getElementById('location-permission-modal');
     modal.style.display = 'none';
     
-    // Zoom and locate user (simulated Chennai EA center grid)
-    map.setView([13.0587, 80.2641], 15);
-    selectPlace("p2");
+    // Zoom and fly-to transition to user coordinate (Chennai EA center)
+    map.flyTo([13.0587, 80.2641], 15, {
+        animate: true,
+        duration: 1.8
+    });
+
+    // Render blue pulsing location indicator circle
+    if (!userLocationMarker) {
+        userLocationMarker = L.circle([13.0587, 80.2641], {
+            color: '#22d3ee',
+            fillColor: '#22d3ee',
+            fillOpacity: 0.15,
+            radius: 80,
+            weight: 2
+        }).addTo(map);
+    }
+
+    setTimeout(() => {
+        selectPlace("p2"); // Express Avenue (Nearest place automatically highlighted)
+    }, 2000);
 }
 
 function denyLocationPermission() {
     const modal = document.getElementById('location-permission-modal');
     modal.style.display = 'none';
+    
+    // Fallback default focus
+    selectPlace("p1");
 }
 
 function toggleBackgroundLocation() {
@@ -695,19 +791,13 @@ function clearLocationHistory() {
 
 // --- CONTINUOUS PLACE DISCOVERY STREAMING ---
 function streamNearbyPlacesOnDrag() {
-    const bounds = map.getBounds();
     const center = map.getCenter();
-    
-    // Simulate streaming dynamic public places near the center coordinate
-    // Only generate if we are in places view mode
-    if (currentViewMode !== "places") return;
+    if (currentViewMode !== "places" || map.getZoom() < 13) return;
 
-    // Check if place is already loaded within radius
     const existingIndex = places.findIndex(p => Math.abs(p.lat - center.lat) < 0.002 && Math.abs(p.lng - center.lng) < 0.002);
     if (existingIndex !== -1) return;
 
-    // Create a new simulated Google Place dynamically
-    const names = ["A2B Restaurant", "Indiranagar Metro Station", "SBI ATM Hub", "Government Library", "Apollo Pharmacy"];
+    const names = ["A2B Restaurant", "Royapettah Metro Station", "SBI ATM Hub", "Government Library", "Apollo Pharmacy"];
     const cats = ["Restaurant", "Metro Station", "ATM", "Library", "Pharmacy"];
     const index = Math.floor(Math.random() * names.length);
     
@@ -718,7 +808,7 @@ function streamNearbyPlacesOnDrag() {
         locationDesc: "Simulated Place near current map center",
         lat: center.lat + (Math.random() - 0.5) * 0.001,
         lng: center.lng + (Math.random() - 0.5) * 0.001,
-        confidence: 0, // Freshly loaded, needs first community check
+        confidence: 0, // Needs community check
         lastVerified: Date.now(),
         halfLife: 45,
         capabilities: {
@@ -738,7 +828,6 @@ function streamNearbyPlacesOnDrag() {
     places.push(newPlace);
     renderAllMarkers();
     
-    // Toast notification overlay inside search response box
     const nodeCount = document.getElementById('hud-nodes-count');
     if (nodeCount) {
         nodeCount.textContent = places.length;
