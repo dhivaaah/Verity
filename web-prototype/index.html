@@ -8,8 +8,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Leaflet.js Map CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,12 +15,12 @@
     <div class="ambient-blur blur-1"></div>
     <div class="ambient-blur blur-2"></div>
 
-    <div class="app-viewport">
-        <!-- Leaflet Map (Fills 100% space as the foundation) -->
+    <div class="app-viewport" id="viewport-root">
+        <!-- Google Map (Fills 100% space as the foundation) -->
         <div id="map"></div>
 
         <!-- Transparent Location Permission Dialog Overlay -->
-        <div class="permission-overlay-container" id="location-permission-modal">
+        <div class="permission-overlay-container" id="location-permission-modal" style="display: flex;">
             <div class="permission-card glass">
                 <div class="permission-icon">📍</div>
                 <h2>See What’s Happening Around You</h2>
@@ -265,8 +263,8 @@
         </nav>
     </div>
 
-    <!-- Leaflet.js JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Google Maps JS API -->
+    <script src="https://maps.googleapis.com/maps/api/js?libraries=places"></script>
     <script src="app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// Verity V1 — Spatial-First UI Controller (India First Grid)
+// Verity V1 — Google Maps Spatial UI Controller
 
 let places = [
     {
@@ -122,11 +122,11 @@ let veritySignal = 18420;
 let userStreak = 28;
 let peopleHelped = 82412;
 let map;
-let markers = {};
-let contributorMarkers = [];
-let heatCircles = [];
+let activeOverlays = [];
+let activeGoogleMarkers = [];
+let activeHeatCircles = [];
 let userLocationMarker = null;
-let selectedPlaceId = "p1";
+let selectedPlaceId = "p2";
 let currentViewMode = "places"; 
 
 const leaderboardData = [
@@ -136,6 +136,44 @@ const leaderboardData = [
     { rank: 4, name: "northsignal", level: "Pulse", signal: 14800, ring: "Normal", lat: 13.0620, lng: 80.2670 },
     { rank: 5, name: "quietpulse", level: "Trace", signal: 11200, ring: "Normal", lat: 13.0550, lng: 80.2600 }
 ];
+
+// Custom HTML Overlay for Google Maps (retains animated glass orbs)
+class CustomHtmlOverlay extends google.maps.OverlayView {
+    constructor(latlng, html, onClick) {
+        super();
+        this.latlng = latlng;
+        this.html = html;
+        this.onClick = onClick;
+        this.div = null;
+    }
+    onAdd() {
+        const div = document.createElement('div');
+        div.style.position = 'absolute';
+        div.style.cursor = 'pointer';
+        div.innerHTML = this.html;
+        div.onclick = (e) => {
+            e.stopPropagation();
+            this.onClick();
+        };
+        this.div = div;
+        const panes = this.getPanes();
+        panes.overlayMouseTarget.appendChild(div);
+    }
+    draw() {
+        const overlayProjection = this.getProjection();
+        const position = overlayProjection.fromLatLngToDivPixel(this.latlng);
+        if (this.div && position) {
+            this.div.style.left = (position.x - 16) + 'px';
+            this.div.style.top = (position.y - 16) + 'px';
+        }
+    }
+    onRemove() {
+        if (this.div) {
+            this.div.parentNode.removeChild(this.div);
+            this.div = null;
+        }
+    }
+}
 
 window.addEventListener('DOMContentLoaded', () => {
     initMap();
@@ -147,27 +185,35 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function initMap() {
-    // Initial zoom centers around Southern India Grid view, showing clusters until location is granted
-    map = L.map('map', {
-        zoomControl: false,
-        attributionControl: false
-    }).setView([13.0587, 80.2641], 10);
+    // Premium dark style configurations for Google Maps
+    const darkStyle = [
+        { "elementType": "geometry", "stylers": [{ "color": "#12131C" }] },
+        { "elementType": "labels.text.stroke", "stylers": [{ "color": "#12131C" }] },
+        { "elementType": "labels.text.fill", "stylers": [{ "color": "#64748b" }] },
+        { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#1E202E" }] },
+        { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#060814" }] },
+        { "featureType": "transit", "stylers": [{ "visibility": "off" }] },
+        { "featureType": "poi", "stylers": [{ "visibility": "off" }] }
+    ];
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 20
-    }).addTo(map);
+    map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 13.0587, lng: 80.2641 },
+        zoom: 13,
+        disableDefaultUI: true,
+        styles: darkStyle,
+        gestureHandling: "greedy"
+    });
 
-    renderAllMarkers();
-
-    // Setup map drag-listeners to support continuous place loading (discovery stream)
-    map.on('moveend', () => {
+    // Google Maps event listeners
+    map.addListener("dragend", () => {
         streamNearbyPlacesOnDrag();
     });
-
-    // Zoom listener for spatial transitions (dissolving heat halos)
-    map.on('zoomend', () => {
+    map.addListener("zoom_changed", () => {
         renderAllMarkers();
     });
+
+    renderAllMarkers();
+    selectPlace("p2"); 
 }
 
 function startDecayEngine() {
@@ -175,7 +221,7 @@ function startDecayEngine() {
         places.forEach((p) => {
             const elapsedMinutes = (Date.now() - p.lastVerified) / (60 * 1000);
             const lambda = Math.log(2) / p.halfLife;
-            const multiplier = 3.0; // Fast decay simulation
+            const multiplier = 3.0; // Decay simulation multiplier
             const newConfidence = 100 * Math.exp(-lambda * elapsedMinutes * multiplier);
 
             if (newConfidence <= 10.0) {
@@ -223,22 +269,19 @@ function getPlaceHealth(p) {
 function renderAllMarkers() {
     const zoom = map.getZoom();
 
-    // Clear everything first
-    clearContributorMarkers();
+    // Clear existing overlay items
+    clearOverlays();
     clearHeatCircles();
-    hidePlaceMarkers();
+    clearGoogleMarkers();
 
     if (currentViewMode === "leaderboard") {
         renderContributorAvatarsOnMap();
         return;
     }
 
-    // Zoom-dependent dissolving layout
-    if (zoom < 13) {
-        // Render regional activity heat halos instead of places
+    if (zoom < 12) {
         renderRegionalHeatHalos();
     } else {
-        // Dissolve halos into individual glass orb markers
         places.forEach(p => {
             const health = getPlaceHealth(p);
             const iconHtml = `
@@ -247,68 +290,53 @@ function renderAllMarkers() {
                 </div>
             `;
 
-            const customIcon = L.divIcon({
-                html: iconHtml,
-                className: 'spatial-marker-icon',
-                iconSize: [32, 32],
-                iconAnchor: [16, 16]
+            const latlng = new google.maps.LatLng(p.lat, p.lng);
+            const overlay = new CustomHtmlOverlay(latlng, iconHtml, () => {
+                selectPlace(p.id);
             });
-
-            if (markers[p.id]) {
-                markers[p.id].setIcon(customIcon);
-                if (!map.hasLayer(markers[p.id])) {
-                    markers[p.id].addTo(map);
-                }
-            } else {
-                const marker = L.marker([p.lat, p.lng], { icon: customIcon }).addTo(map);
-                marker.on('click', () => {
-                    selectPlace(p.id);
-                });
-                markers[p.id] = marker;
-            }
+            overlay.setMap(map);
+            activeOverlays.push(overlay);
         });
     }
 }
 
-function hidePlaceMarkers() {
-    Object.keys(markers).forEach(id => {
-        map.removeLayer(markers[id]);
-    });
+function clearOverlays() {
+    activeOverlays.forEach(o => o.setMap(null));
+    activeOverlays = [];
 }
 
-function clearContributorMarkers() {
-    contributorMarkers.forEach(m => map.removeLayer(m));
-    contributorMarkers = [];
+function clearGoogleMarkers() {
+    activeGoogleMarkers.forEach(m => m.setMap(null));
+    activeGoogleMarkers = [];
 }
 
 function clearHeatCircles() {
-    heatCircles.forEach(c => map.removeLayer(c));
-    heatCircles = [];
+    activeHeatCircles.forEach(c => c.setMap(null));
+    activeHeatCircles = [];
 }
 
 function renderRegionalHeatHalos() {
-    // Group SFO grid and Chennai grid into 2 heat rings
     const zones = [
         { lat: 12.9716, lng: 77.6412, label: "Quiet Area", color: "#10b981" },
         { lat: 13.0587, lng: 80.2641, label: "Activity Spike", color: "#ef4444" }
     ];
 
     zones.forEach(z => {
-        const circle = L.circle([z.lat, z.lng], {
-            color: z.color,
+        const circle = new google.maps.Circle({
+            strokeColor: z.color,
+            strokeOpacity: 0.8,
+            strokeWeight: 1,
             fillColor: z.color,
             fillOpacity: 0.15,
-            radius: 2000,
-            weight: 1
-        }).addTo(map);
-
-        circle.bindTooltip(z.label, { permanent: true, direction: "center", className: "spatial-heat-tooltip" });
-        heatCircles.push(circle);
+            map: map,
+            center: { lat: z.lat, lng: z.lng },
+            radius: 2000
+        });
+        activeHeatCircles.push(circle);
     });
 }
 
 function renderContributorAvatarsOnMap() {
-    clearContributorMarkers();
     leaderboardData.forEach(user => {
         const glowColor = user.ring === "Aurora" ? "#a855f7" : (user.ring === "Crystal" ? "#cbd5e1" : "#06b6d4");
         const iconHtml = `
@@ -317,15 +345,8 @@ function renderContributorAvatarsOnMap() {
             </div>
         `;
 
-        const customIcon = L.divIcon({
-            html: iconHtml,
-            className: 'contributor-avatar-marker',
-            iconSize: [36, 36],
-            iconAnchor: [18, 18]
-        });
-
-        const marker = L.marker([user.lat, user.lng], { icon: customIcon }).addTo(map);
-        marker.on('click', () => {
+        const latlng = new google.maps.LatLng(user.lat, user.lng);
+        const overlay = new CustomHtmlOverlay(latlng, iconHtml, () => {
             const responseBox = document.getElementById('search-response-box');
             const responseText = document.getElementById('search-response-text');
             responseText.innerHTML = `
@@ -336,7 +357,8 @@ function renderContributorAvatarsOnMap() {
             `;
             responseBox.style.display = 'block';
         });
-        contributorMarkers.push(marker);
+        overlay.setMap(map);
+        activeOverlays.push(overlay);
     });
 }
 
@@ -345,7 +367,7 @@ function selectPlace(id) {
     const p = places.find(item => item.id === id);
     if (!p) return;
 
-    map.panTo([p.lat, p.lng]);
+    map.panTo({ lat: p.lat, lng: p.lng });
     closeAllSheets();
     
     updatePlaceSheetDetails();
@@ -362,7 +384,6 @@ function updatePlaceSheetDetails() {
     
     let nowHtml = "";
     Object.keys(p.capabilities).forEach(key => {
-        // Clean status flags formatting: Green / Amber status flags
         const val = p.capabilities[key].toUpperCase();
         let dot = "🟢";
         if (val === "BUSY" || val === "LIMITED") dot = "🟡";
@@ -530,7 +551,7 @@ function handleDockNav(tab) {
     } else if (tab === 'feed') {
         currentViewMode = "places";
         renderAllMarkers();
-        selectPlace("p2"); // Express Avenue (Home view)
+        selectPlace("p2"); 
     }
 }
 
@@ -569,7 +590,7 @@ function triggerGeofenceExit() {
         }, 1500);
     };
 
-    map.panTo([13.0587, 80.2641]);
+    map.panTo({ lat: 13.0587, lng: 80.2641 });
     selectPlace("p2");
 }
 
@@ -603,9 +624,9 @@ function switchLeaderboardScope(scope) {
     renderLeaderboard(scope);
     
     if (scope === 'Global' || scope === 'India') {
-        map.setView([13.0587, 80.2641], 5);
+        map.setZoom(5);
     } else {
-        map.setView([13.0587, 80.2641], 15);
+        map.setZoom(15);
     }
     renderAllMarkers();
 }
@@ -741,34 +762,67 @@ function acceptLocationPermission() {
     const modal = document.getElementById('location-permission-modal');
     modal.style.display = 'none';
     
-    // Zoom and fly-to transition to user coordinate (Chennai EA center)
-    map.flyTo([13.0587, 80.2641], 15, {
-        animate: true,
-        duration: 1.8
-    });
-
-    // Render blue pulsing location indicator circle
-    if (!userLocationMarker) {
-        userLocationMarker = L.circle([13.0587, 80.2641], {
-            color: '#22d3ee',
-            fillColor: '#22d3ee',
-            fillOpacity: 0.15,
-            radius: 80,
-            weight: 2
-        }).addTo(map);
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+                
+                // Fly to actual user coordinate
+                map.panTo({ lat: userLat, lng: userLng });
+                map.setZoom(16);
+                
+                if (userLocationMarker) {
+                    userLocationMarker.setMap(null);
+                }
+                userLocationMarker = new google.maps.Circle({
+                    strokeColor: '#22d3ee',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: '#22d3ee',
+                    fillOpacity: 0.15,
+                    map: map,
+                    center: { lat: userLat, lng: userLng },
+                    radius: 60
+                });
+            },
+            (error) => {
+                console.warn("Geolocation API error, defaulting to Chennai grid:", error);
+                fallbackLocationCenter();
+            },
+            { timeout: 5000 }
+        );
+    } else {
+        fallbackLocationCenter();
     }
+}
 
+function fallbackLocationCenter() {
+    map.panTo({ lat: 13.0587, lng: 80.2641 }); // Chennai Express Avenue grid default
+    map.setZoom(15);
+    
+    if (userLocationMarker) {
+        userLocationMarker.setMap(null);
+    }
+    userLocationMarker = new google.maps.Circle({
+        strokeColor: '#22d3ee',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: '#22d3ee',
+        fillOpacity: 0.15,
+        map: map,
+        center: { lat: 13.0587, lng: 80.2641 },
+        radius: 80
+    });
     setTimeout(() => {
-        selectPlace("p2"); // Express Avenue (Nearest place automatically highlighted)
-    }, 2000);
+        selectPlace("p2"); 
+    }, 1500);
 }
 
 function denyLocationPermission() {
     const modal = document.getElementById('location-permission-modal');
     modal.style.display = 'none';
-    
-    // Fallback default focus
-    selectPlace("p1");
+    fallbackLocationCenter();
 }
 
 function toggleBackgroundLocation() {
@@ -791,10 +845,13 @@ function clearLocationHistory() {
 
 // --- CONTINUOUS PLACE DISCOVERY STREAMING ---
 function streamNearbyPlacesOnDrag() {
-    const center = map.getCenter();
     if (currentViewMode !== "places" || map.getZoom() < 13) return;
 
-    const existingIndex = places.findIndex(p => Math.abs(p.lat - center.lat) < 0.002 && Math.abs(p.lng - center.lng) < 0.002);
+    const center = map.getCenter();
+    const lat = center.lat();
+    const lng = center.lng();
+
+    const existingIndex = places.findIndex(p => Math.abs(p.lat - lat) < 0.003 && Math.abs(p.lng - lng) < 0.003);
     if (existingIndex !== -1) return;
 
     const names = ["A2B Restaurant", "Royapettah Metro Station", "SBI ATM Hub", "Government Library", "Apollo Pharmacy"];
@@ -806,8 +863,8 @@ function streamNearbyPlacesOnDrag() {
         name: names[index],
         category: cats[index],
         locationDesc: "Simulated Place near current map center",
-        lat: center.lat + (Math.random() - 0.5) * 0.001,
-        lng: center.lng + (Math.random() - 0.5) * 0.001,
+        lat: lat + (Math.random() - 0.5) * 0.002,
+        lng: lng + (Math.random() - 0.5) * 0.002,
         confidence: 0, // Needs community check
         lastVerified: Date.now(),
         halfLife: 45,
