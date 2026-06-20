@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verity-backend
+  namespace: verity
+  labels:
+    app: verity-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: verity-backend
+  template:
+    metadata:
+      labels:
+        app: verity-backend
+    spec:
+      containers:
+      - name: verity-backend
+        image: verity-registry/verity-backend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DB_HOST
+          value: "postgres-service.verity.svc.cluster.local"
+        - name: REDIS_HOST
+          value: "redis-service.verity.svc.cluster.local:6379"
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1024Mi
+          requests:
+            cpu: "500m"
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /api/reports
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/reports
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: verity-backend-service
+  namespace: verity
+spec:
+  selector:
+    app: verity-backend
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP

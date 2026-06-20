@@ -1,0 +1,100 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Verity Place SDK - Live Physical Graph API",
+    "version": "1.0.0",
+    "description": "Universal machine-to-machine interface for accessing the live state, timelines, patterns, and relationships of physical places on Earth."
+  },
+  "paths": {
+    "/v1/place/live": {
+      "get": {
+        "summary": "Retrieve Live State",
+        "description": "Returns the real-time operational status, modular capabilities, and parent-child relationships of a physical place.",
+        "parameters": [
+          {
+            "name": "place_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaceState"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PlaceState": {
+        "type": "object",
+        "properties": {
+          "place_id": { "type": "string" },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "category": { "type": "string" },
+              "coordinates": {
+                "type": "object",
+                "properties": {
+                  "latitude": { "type": "number" },
+                  "longitude": { "type": "number" }
+                }
+              }
+            }
+          },
+          "live_state": {
+            "type": "object",
+            "properties": {
+              "operational": { "type": "string", "example": "RUNNING_NORMALLY" },
+              "capacity": { "type": "string", "example": "AVAILABLE" },
+              "amenities": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              },
+              "safety": { "type": "string", "example": "SAFE" },
+              "last_updated": { "type": "string", "format": "date-time" }
+            }
+          },
+          "intelligence": {
+            "type": "object",
+            "properties": {
+              "today_trends": { "type": "array", "items": { "type": "string" } },
+              "historical_patterns": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "relationships": {
+            "type": "object",
+            "properties": {
+              "parent_place_id": { "type": "string", "nullable": true },
+              "child_places": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "place_id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "category": { "type": "string" },
+                    "live_state": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

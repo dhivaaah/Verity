@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verity — The Living Map of Truth</title>
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet.js Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Premium Frosted Dynamic Background Blur Elements -->
+    <div class="blob blob-blue"></div>
+    <div class="blob blob-green"></div>
+    <div class="blob blob-red"></div>
+
+    <div class="app-container">
+        <!-- Sidebar: Active Reports Feed & Filters -->
+        <aside class="sidebar glass">
+            <header class="sidebar-header">
+                <div class="logo-area">
+                    <div class="logo-pulse-circle"></div>
+                    <h1>VERITY</h1>
+                </div>
+                <p class="tagline">the reality maintenance layer</p>
+                
+                <!-- Conversational Search Bar -->
+                <div class="search-box">
+                    <input type="text" id="conversational-search" placeholder="Where are you going?" onkeypress="handleSearch(event)">
+                    <button class="search-btn" onclick="triggerSearch()">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </button>
+                </div>
+                
+                <!-- Suggested Queries -->
+                <div class="suggested-queries">
+                    <span class="query-chip" onclick="searchQuery('Is SFO terminal running?')">Is SFO terminal running?</span>
+                    <span class="query-chip" onclick="searchQuery('Is the cafe crowded?')">Is the cafe crowded?</span>
+                    <span class="query-chip" onclick="searchQuery('Is ER waiting time low?')">Is ER waiting time low?</span>
+                </div>
+
+                <div id="search-response-box" class="search-response" style="display: none;">
+                    <div class="response-header">
+                        <span class="response-badge">Verity</span>
+                        <button class="close-response-btn" onclick="clearSearch()">×</button>
+                    </div>
+                    <div id="search-response-text" class="response-body">
+                        <!-- Injected answer -->
+                    </div>
+                </div>
+            </header>
+
+            <!-- 1. Feed View Panel Container -->
+            <div id="panel-feed" class="sidebar-panel-content">
+                <!-- Live Pulse Area Header -->
+                <div class="live-pulse-container">
+                    <div class="pulse-meta">
+                        <span class="location-name">SF Financial District</span>
+                        <span class="pulse-status-badge">🟢 Everything Normal</span>
+                    </div>
+                    <div class="pulse-summary">
+                        Updated continuously • Recent events: Power restored, ATM cash replenished, no road blockages.
+                    </div>
+                </div>
+
+                <!-- Quick Reporting Panel -->
+                <div class="quick-report-panel">
+                    <div class="quick-report-title">TAP TO REPORT LIVE STATUS</div>
+                    <div class="quick-report-bar">
+                        <button class="quick-btn" onclick="quickReport('ATM Cash')">🏧 Cash OK</button>
+                        <button class="quick-btn" onclick="quickReport('ATM Offline')">🏧 Cash Out</button>
+                        <button class="quick-btn" onclick="quickReport('Flood')">🌊 Flood</button>
+                        <button class="quick-btn" onclick="quickReport('Power Outage')">⚡ Outage</button>
+                    </div>
+                </div>
+
+                <!-- Real-time dynamic reports list -->
+                <div class="reports-feed" id="reports-feed">
+                    <!-- Injected via JavaScript -->
+                </div>
+            </div>
+
+            <!-- 2. Ranks & Leaderboard View Panel Container -->
+            <div id="panel-ranks" class="sidebar-panel-content" style="display: none; padding: 24px; overflow-y: auto;">
+                <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px; letter-spacing: 0.5px;">CIVIC LEADERBOARD</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 20px;">Top contributors keeping reality accurate within city grid</div>
+                <div class="leaderboard-list" id="leaderboard-list">
+                    <!-- Injected via JavaScript -->
+                </div>
+            </div>
+
+            <!-- 3. Profile Identity Card View Panel Container -->
+            <div id="panel-profile" class="sidebar-panel-content" style="display: none; padding: 32px; overflow-y: auto;">
+                <!-- Identity Card layout -->
+                <div class="profile-card-header" style="text-align: center; margin-bottom: 24px;">
+                    <div class="avatar-ringPolar" style="width: 80px; height: 80px; margin: 0 auto 12px auto; display: flex; align-items: center; justify-content: center;">
+                        <div class="avatar" style="background: var(--accent); width: 64px; height: 64px; border-radius: 50%; font-size: 16px; font-weight: bold; display: flex; align-items: center; justify-content: center; color: #fff;">Sent</div>
+                    </div>
+                    <h2 style="font-size: 20px; font-weight: 700;">dhiv_sentinel</h2>
+                    <div style="font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 4px;">Level 8 — Prism</div>
+                    <div style="font-size: 14px; margin-top: 8px; font-weight: 700;">◉ 18,420 Signal</div>
+                </div>
+
+                <div class="profile-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 24px;">
+                    <div class="profile-stat-box" style="background: rgba(255,255,255,0.01); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; text-align: center;">
+                        <span style="font-size: 9px; color: var(--text-tertiary); display: block; text-transform: uppercase;">Area Rank</span>
+                        <strong style="font-size: 16px;">#3</strong>
+                    </div>
+                    <div class="profile-stat-box" style="background: rgba(255,255,255,0.01); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; text-align: center;">
+                        <span style="font-size: 9px; color: var(--text-tertiary); display: block; text-transform: uppercase;">Town Rank</span>
+                        <strong style="font-size: 16px;">#12</strong>
+                    </div>
+                    <div class="profile-stat-box" style="background: rgba(255,255,255,0.01); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; text-align: center;">
+                        <span style="font-size: 9px; color: var(--text-tertiary); display: block; text-transform: uppercase;">City Rank</span>
+                        <strong style="font-size: 16px;">#41</strong>
+                    </div>
+                    <div class="profile-stat-box" style="background: rgba(255,255,255,0.01); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; text-align: center;">
+                        <span style="font-size: 9px; color: var(--text-tertiary); display: block; text-transform: uppercase;">Joined Since</span>
+                        <strong style="font-size: 12px; line-height: 2;">June 2026</strong>
+                    </div>
+                </div>
+
+                <div class="place-memory-box" style="margin-bottom: 24px;">
+                    <div style="font-weight: 700; color: var(--text-secondary); text-transform: uppercase; font-size: 9px; margin-bottom: 8px;">Community Impact Summary</div>
+                    📈 <strong>42,184</strong> People Helped<br/>
+                    🛠 <strong>3,182</strong> Places Maintained<br/>
+                    ✓ <strong>612</strong> Corrections Made
+                </div>
+            </div>
+
+            <!-- 4. Weekly Summaries & Alerts View Panel Container -->
+            <div id="panel-alerts" class="sidebar-panel-content" style="display: none; padding: 24px; overflow-y: auto;">
+                <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px; letter-spacing: 0.5px;">WEEKLY REFLECTION</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 20px;">Reflecting on your collective local reality updates</div>
+                
+                <div id="weekly-dashboard-card" class="glass" style="border-radius: 20px; padding: 24px; background: rgba(255,255,255,0.01); border-color: rgba(255,255,255,0.05);">
+                    <div style="text-align: center; margin-bottom: 16px;">
+                        <h3 id="weekly-reflection-title" style="font-size: 16px; font-weight: 700;">Reality Report</h3>
+                        <span style="font-size: 10px; color: var(--accent);">Week 26 — June 2026</span>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px;">
+                            <span>Places Maintained</span>
+                            <strong style="color: var(--accent);">32</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px;">
+                            <span>Corrections Accepted</span>
+                            <strong style="color: var(--accent);">6</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px;">
+                            <span>Community Reach</span>
+                            <strong style="color: var(--accent);">18,421</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px;">
+                            <span>Reality Streak</span>
+                            <strong>28 Places</strong>
+                        </div>
+                        <div style="border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px;">
+                            <span>Most Helpful Contribution</span>
+                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">☕ Brew Cafe — WiFi Restored (Viewed by 1,284 people)</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Most Active Category</span>
+                            <strong>Restaurants</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area: Interactive Map -->
+        <main class="map-container glass">
+            <div id="map"></div>
+
+            <!-- Passive context-aware verification popup -->
+            <div id="passive-verification-banner" class="passive-banner glass">
+                <div class="passive-icon">🔔</div>
+                <div class="passive-text" id="passive-banner-text">Just left Brew Cafe? Was the Wi-Fi working?</div>
+                <div class="passive-actions">
+                    <button class="passive-verify-btn btn-confirm" onclick="respondPassiveVerify(true)">✓ Yes</button>
+                    <button class="passive-verify-btn btn-contradict" onclick="respondPassiveVerify(false)">✗ No</button>
+                </div>
+            </div>
+
+            <!-- Place SDK JSON API viewer HUD -->
+            <div class="map-hud top-left glass sdk-payload-hud">
+                <div class="sdk-header">
+                    <span>GET /v1/place/live</span>
+                    <span class="api-pulse"></span>
+                </div>
+                <pre id="sdk-payload-code">Select a place to see live API payload...</pre>
+            </div>
+
+            <!-- Absolute HUDs overlaying the map -->
+            <div class="map-hud top-right glass">
+                <h3>VERITY CORE</h3>
+                <div style="margin-bottom: 12px;">
+                    <button class="quick-btn" style="background: rgba(0, 122, 255, 0.2); border-color: var(--primary);" onclick="triggerExitSimulation()">⚡ Simulate Exit SFO</button>
+                </div>
+                <div class="engine-stat">
+                    <span>Active Places:</span>
+                    <span id="stat-active-count">0</span>
+                </div>
+                <div class="engine-stat">
+                    <span>Active Nodes:</span>
+                    <span class="text-green">240</span>
+                </div>
+            </div>
+
+            <!-- Reality Streaks & Gamification Console -->
+            <div class="map-hud bottom-left glass gamification-hud">
+                <div class="user-profile-badge">
+                    <div class="avatar" style="background: var(--accent); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; color: #fff;">Active</div>
+                    <div>
+                        <div class="username">dhiv_sentinel</div>
+                        <div class="user-tier" style="color: var(--accent); font-weight: bold; font-size: 11px;">Reality Sentinel</div>
+                    </div>
+                </div>
+                <div style="font-size: 11px; margin-top: 10px; line-height: 1.4;">
+                    🔥 <strong>28 places</strong> kept accurate this week.<br/>
+                    👥 <strong>18,420 people</strong> helped via updates.<br/>
+                    Score: <strong id="user-truth-score">1,240</strong>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Floating Dock Glass Navigation -->
+    <nav class="bottom-dock glass">
+        <button class="dock-item active" onclick="switchSidebarTab('feed', this)" title="Home Feed">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <span>Feed</span>
+        </button>
+        
+        <button class="dock-item" onclick="switchSidebarTab('ranks', this)" title="Leaderboard">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            <span>Ranks</span>
+        </button>
+
+        <!-- Report Action Button -->
+        <button class="dock-item report-action-btn" id="btn-report-truth" title="Register Place">
+            <div class="pulse-ring"></div>
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+
+        <button class="dock-item" onclick="switchSidebarTab('alerts', this)" title="Weekly Summaries">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            <span>Alerts</span>
+        </button>
+
+        <button class="dock-item" onclick="switchSidebarTab('profile', this)" title="Maintainer Card">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <span>Profile</span>
+        </button>
+    </nav>
+
+    <!-- Modal for Registering a New Place Identity -->
+    <div class="modal-overlay" id="report-modal">
+        <div class="modal-content glass">
+            <h2>Add Place to Earth Layer</h2>
+            <p class="modal-sub">Register the physical place coordinate to begin mapping live states</p>
+            <form id="new-report-form">
+                <div class="form-group">
+                    <label for="report-note">Place Name</label>
+                    <input type="text" id="report-note" placeholder="e.g., SBI ATM, Starbucks Cafe, Anna University Library" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="report-category">Category</label>
+                    <select id="report-category" required>
+                        <option value="Cafe">☕ Cafe</option>
+                        <option value="Hospital">🏥 Hospital</option>
+                        <option value="Cinema">🎬 Cinema</option>
+                        <option value="Mall">🛍 Mall</option>
+                        <option value="Beach">🏖 Beach</option>
+                        <option value="Metro Station">🚇 Metro Station</option>
+                        <option value="University">🎓 University</option>
+                        <option value="ATM">🏧 ATM</option>
+                        <option value="Restaurant">🍔 Restaurant</option>
+                        <option value="Store">🏪 Store</option>
+                    </select>
+                </div>
+
+                <div class="geo-picker-info">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <span>Positioned at clicked coordinates on map</span>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeReportModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Register Place</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Leaflet.js JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
