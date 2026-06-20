@@ -1,11 +1,11 @@
-/* Verity V1 — Spatial Glassmorphic Design System (Refined) */
+/* Verity V1 — Spatial Glassmorphism Design System (Refined) */
 
 :root {
     --bg-deep: #03050c;
     --glass-base: rgba(10, 15, 30, 0.6);
     --glass-surface: rgba(255, 255, 255, 0.03);
     --glass-border: rgba(255, 255, 255, 0.06);
-    --glass-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.8);
+    --glass-shadow: 0 20px 60px -15 rgba(0, 0, 0, 0.8);
     
     /* Semantic Status Colors (Only 4 primary color families) */
     --state-healthy: #10b981;
@@ -326,7 +326,7 @@ body {
     left: 50%;
     transform: translateX(-50%);
     width: 460px;
-    height: 520px;
+    height: 480px;
     border-radius: 36px 36px 0 0;
     padding: 32px 32px 24px 32px;
     display: flex;
@@ -334,11 +334,15 @@ body {
     background: var(--glass-sheet);
     border-bottom: none;
     box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.7);
-    transition: bottom 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: bottom 0.5s cubic-bezier(0.16, 1, 0.3, 1), height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .floating-place-sheet.active {
     bottom: 0;
+}
+
+.floating-place-sheet.expanded-height {
+    height: 82vh;
 }
 
 .sheet-drag-handle {
@@ -684,6 +688,7 @@ body {
     display: block;
 }
 
+/* Privacy toggles styling */
 .privacy-settings h4, .reflection-settings h4 {
     font-size: 12px;
     color: var(--text-secondary);

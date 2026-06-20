@@ -179,13 +179,13 @@ window.addEventListener('DOMContentLoaded', () => {
     initMap();
     startDecayEngine();
     renderLeaderboard("Nearby");
+    setupPlaceSheetDrag();
     
     updateOdometer("profile-signal-val", veritySignal);
     setupSearchSuggestions();
 });
 
 function initMap() {
-    // Premium dark style configurations for Google Maps
     const darkStyle = [
         { "elementType": "geometry", "stylers": [{ "color": "#12131C" }] },
         { "elementType": "labels.text.stroke", "stylers": [{ "color": "#12131C" }] },
@@ -204,7 +204,6 @@ function initMap() {
         gestureHandling: "greedy"
     });
 
-    // Google Maps event listeners
     map.addListener("dragend", () => {
         streamNearbyPlacesOnDrag();
     });
@@ -212,8 +211,52 @@ function initMap() {
         renderAllMarkers();
     });
 
-    renderAllMarkers();
-    selectPlace("p2"); 
+    // Request native geolocation immediately on launch
+    requestLiveLocationOnLaunch();
+}
+
+function requestLiveLocationOnLaunch() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+                
+                // Hide custom modal immediately since it was auto-granted by browser
+                document.getElementById('location-permission-modal').style.display = 'none';
+                
+                // Center and zoom map to user
+                map.setCenter({ lat: userLat, lng: userLng });
+                map.setZoom(15);
+                
+                // Drop user marker dot
+                if (userLocationMarker) userLocationMarker.setMap(null);
+                userLocationMarker = new google.maps.Circle({
+                    strokeColor: '#22d3ee',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: '#22d3ee',
+                    fillOpacity: 0.15,
+                    map: map,
+                    center: { lat: userLat, lng: userLng },
+                    radius: 80
+                });
+
+                renderAllMarkers();
+                streamNearbyPlacesOnDrag(); // Stream places near user's real location
+            },
+            (error) => {
+                console.warn("Native Geolocation failed/denied, keeping modal open:", error);
+                // Default coordinates (Chennai Royapettah) are kept, permission modal stays open
+                renderAllMarkers();
+                selectPlace("p2");
+            },
+            { timeout: 5000 }
+        );
+    } else {
+        renderAllMarkers();
+        selectPlace("p2");
+    }
 }
 
 function startDecayEngine() {
@@ -269,7 +312,6 @@ function getPlaceHealth(p) {
 function renderAllMarkers() {
     const zoom = map.getZoom();
 
-    // Clear existing overlay items
     clearOverlays();
     clearHeatCircles();
     clearGoogleMarkers();
@@ -552,6 +594,41 @@ function handleDockNav(tab) {
         currentViewMode = "places";
         renderAllMarkers();
         selectPlace("p2"); 
+    } else if (tab === 'center-action') {
+        // Elevated verification scanner trigger
+        handleCenterAction();
+    }
+}
+
+// Elevated validation scanner trigger
+function handleCenterAction() {
+    const center = map.getCenter();
+    const lat = center.lat();
+    const lng = center.lng();
+    
+    let closestPlace = null;
+    let minDistance = Infinity;
+    
+    places.forEach(p => {
+        const dist = Math.pow(p.lat - lat, 2) + Math.pow(p.lng - lng, 2);
+        if (dist < minDistance) {
+            minDistance = dist;
+            closestPlace = p;
+        }
+    });
+    
+    if (closestPlace) {
+        selectPlace(closestPlace.id);
+        triggerLooksGood(closestPlace.id);
+        
+        // Show verification success toast
+        const responseBox = document.getElementById('search-response-box');
+        const responseText = document.getElementById('search-response-text');
+        responseText.innerHTML = `
+            <div style="font-size:10px; color:var(--state-healthy); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Instant Verification</div>
+            🟢 Verified <strong>${closestPlace.name}</strong> as accurate. <strong class="text-cyan">+10 Signal</strong> awarded.
+        `;
+        responseBox.style.display = 'block';
     }
 }
 
@@ -607,6 +684,7 @@ function dismissDynamicIsland(event) {
     island.className = "dynamic-island-collapsed";
 }
 
+// Launches Weekly Reflection dashboard overlay
 function openWeeklyReflection(event) {
     if (event) event.stopPropagation();
     dismissDynamicIsland();
@@ -678,6 +756,17 @@ function setupSearchSuggestions() {
         `;
         responseBox.style.display = 'block';
     });
+}
+
+// Expand or collapse place sheets when clicking drag handle
+function setupPlaceSheetDrag() {
+    const handle = document.querySelector('.sheet-drag-handle');
+    const sheet = document.getElementById('place-sheet');
+    if (handle && sheet) {
+        handle.onclick = () => {
+            sheet.classList.toggle('expanded-height');
+        };
+    }
 }
 
 function searchQuery(val) {
