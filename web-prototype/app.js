@@ -1,6 +1,5 @@
-// Verity: The Live Layer of the Physical World
+// Verity V1 — Spatial-First UI Controller
 
-// 1. Places Graph Dataset
 let places = [
     {
         id: "p1",
@@ -14,9 +13,9 @@ let places = [
         halfLife: 45,
         capabilities: {
             operational: "OPEN",
-            capacity: "Seats Available",
-            wifi: "Wi-Fi Working",
-            payment: "Card Accepted"
+            wifi: "WiFi Working",
+            seats: "Seats Available",
+            crowd: "Moderate Crowd"
         },
         memoryStats: {
             reliability: "99% of last 30 days",
@@ -28,10 +27,6 @@ let places = [
         timeline: [
             { time: "11:40 AM", text: "WiFi status confirmed active", positive: true },
             { time: "12:05 PM", text: "Verified seats available", positive: true }
-        ],
-        connections: [
-            { targetId: "p5", name: "Metro Exit 3", category: "Metro", relation: "adjacent" },
-            { targetId: "p6", name: "EV Station - Block 4", category: "EV Charger", relation: "100m away" }
         ]
     },
     {
@@ -46,7 +41,6 @@ let places = [
         halfLife: 180,
         capabilities: {
             operational: "Terminal Open",
-            capacity: "Moderate Crowd",
             taxi: "Taxi Queue Low",
             parking: "Parking Available"
         },
@@ -58,13 +52,7 @@ let places = [
         },
         patterns: ["Heaviest congestion on Friday evenings", "Taxi queue peak at 9 AM"],
         timeline: [
-            { time: "8:05 AM", text: "Security lines moving fast", positive: true },
-            { time: "10:30 AM", text: "Terminal check-ins normal", positive: true }
-        ],
-        connections: [
-            { targetId: "p7", name: "Airport Taxi Stand", category: "Taxi", relation: "directly connected" },
-            { targetId: "p8", name: "Airport Metro Station", category: "Metro", relation: "directly connected" },
-            { targetId: "p9", name: "Airport Parking Lot B", category: "Parking", relation: "directly connected" }
+            { time: "8:05 AM", text: "Security lines moving fast", positive: true }
         ]
     },
     {
@@ -80,8 +68,7 @@ let places = [
         capabilities: {
             operational: "Emergency Open",
             capacity: "Wait < 20 min",
-            parking: "Parking Available",
-            pharmacy: "Pharmacy Open"
+            parking: "Parking Available"
         },
         memoryStats: {
             reliability: "100% of last 30 days",
@@ -92,24 +79,11 @@ let places = [
         patterns: ["Usually busy on Monday mornings", "Parking typically full in afternoon"],
         timeline: [
             { time: "9:00 AM", text: "Emergency unit active and clear", positive: true }
-        ],
-        connections: [
-            { targetId: "p11", name: "Hospital Pharmacy", category: "Pharmacy", relation: "adjacent" }
         ]
     }
 ];
 
-// Graph registry lookup
-let graphRegistry = {
-    "p5": { name: "Metro Exit 3", category: "Metro", status: "RUNNING" },
-    "p6": { name: "EV Station - Block 4", category: "EV Charger", status: "2 AVAILABLE" },
-    "p7": { name: "Airport Taxi Stand", category: "Taxi", status: "4 MIN WAIT" },
-    "p8": { name: "Airport Metro Station", category: "Metro", status: "RUNNING" },
-    "p9": { name: "Airport Parking Lot B", category: "Parking", status: "65% OCCUPIED" },
-    "p11": { name: "Hospital Pharmacy", category: "Pharmacy", status: "OPEN" }
-};
-
-// Max 4 Options Checklist context updates
+// Configuration definitions
 const updateOptions = {
     "Cafe": ["WiFi Down", "No Seats", "AC Not Working", "Closed"],
     "Airport": ["Terminal Closed", "Taxi Delay", "Parking Full", "Security Delay"],
@@ -117,12 +91,15 @@ const updateOptions = {
     "ATM": ["Out of Cash", "Card Slot Broken", "Offline", "Queue"]
 };
 
-// Trust Signal and level configuration
+// Seeding global variables
 let veritySignal = 18420;
 let userStreak = 28;
-let peopleHelped = 42184;
+let peopleHelped = 82412;
+let map;
+let markers = {};
+let selectedPlaceId = "p1";
+let currentIslandAction = "exit-sfo";
 
-// Civic leaderboard mock dataset
 const leaderboardData = [
     { rank: 1, name: "glassatlas", level: "Lattice", signal: 24180, ring: "Aurora" },
     { rank: 2, name: "stilltrue", level: "Vector", signal: 19420, ring: "Crystal" },
@@ -131,127 +108,93 @@ const leaderboardData = [
     { rank: 5, name: "quietpulse", level: "Trace", signal: 11200, ring: "Normal" }
 ];
 
-// Rotated weekly titles
-const weeklyTitles = [
-    "Reality Report",
-    "Your Weekly Impact",
-    "This Week in Verity",
-    "Community Reflection",
-    "Keeping Places Accurate"
-];
-let currentTitleIndex = 0;
-
-let map;
-let markers = {};
-let selectedPlaceId = "p1";
-let pendingLat = 37.7749;
-let pendingLng = -122.4194;
-
 window.addEventListener('DOMContentLoaded', () => {
     initMap();
-    setupEvents();
     startDecayEngine();
-    renderLeaderboard();
+    renderLeaderboard("Nearby");
     
-    // Hide passive geofence banner by default until simulated
-    document.getElementById('passive-verification-banner').style.display = 'none';
+    // Set initial Signal values in DOM
+    updateOdometer("profile-signal-val", veritySignal);
 });
 
 function initMap() {
     map = L.map('map', {
         zoomControl: false,
         attributionControl: false
-    }).setView([37.7749, -122.4194], 13);
+    }).setView([37.7749, -122.4194], 14);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}{d}.png', {
+    // Sleek premium CartoDB Dark map styling
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 20
     }).addTo(map);
 
-    map.on('click', (e) => {
-        openReportModal(e.latlng.lat, e.latlng.lng);
-    });
-
-    renderAll();
+    renderAllMarkers();
+    selectPlace("p1"); // Set default
 }
 
 function startDecayEngine() {
     setInterval(() => {
-        let changed = false;
         places.forEach((p) => {
             const elapsedMinutes = (Date.now() - p.lastVerified) / (60 * 1000);
             const lambda = Math.log(2) / p.halfLife;
+            // Simulated 3x decay speed to show in real time
             const multiplier = 3.0;
             const newConfidence = 100 * Math.exp(-lambda * elapsedMinutes * multiplier);
 
             if (newConfidence <= 10.0) {
                 p.confidence = 0;
-                changed = true;
             } else {
-                if (Math.abs(p.confidence - newConfidence) > 0.1) {
-                    p.confidence = newConfidence;
-                    changed = true;
-                }
+                p.confidence = newConfidence;
             }
         });
-
-        if (changed) {
-            updateUI();
-            updateSDKPayloadViewer();
-        }
-    }, 1000);
+        updatePlaceSheetDetails();
+        renderAllMarkers();
+    }, 2000);
 }
 
 function getPlaceHealth(p) {
     const c = p.confidence;
-    const minutesAgo = Math.max(1, Math.round((Date.now() - p.lastVerified) / 60000));
-    
     if (c <= 10.0) {
         return {
-            statusLabel: "Needs Fresh Check",
-            desc: "Were you recently here? Confirm live details.",
-            colorClass: "dot-grey",
+            statusLabel: "Awaiting Check",
+            desc: "Needs verification",
+            colorClass: "inactive",
             hexColor: "#6b7280",
-            badge: "⚫ AWAITING CHECK",
-            isStale: true
+            badgeClass: "badge-inactive"
         };
     }
-
-    if (c >= 15 && c < 75) {
+    if (c < 75) {
         return {
-            statusLabel: "Needs Attention",
-            desc: "Status changes recently reported. Verify current truth.",
-            colorClass: "dot-yellow",
+            statusLabel: "Checking",
+            desc: "Status updates reported",
+            colorClass: "attention",
             hexColor: "#f59e0b",
-            badge: "🟡 CHECKING",
-            isStale: false
+            badgeClass: "badge-attention"
         };
     }
-
     return {
         statusLabel: "Healthy",
-        desc: `Everything recently confirmed. Last community check ${minutesAgo} min ago.`,
-        colorClass: "dot-green",
+        desc: "Community verified",
+        colorClass: "healthy",
         hexColor: "#10b981",
-        badge: "🟢 HEALTHY",
-        isStale: false
+        badgeClass: "badge-healthy"
     };
 }
 
-function updateMarkers() {
+function renderAllMarkers() {
     places.forEach(p => {
         const health = getPlaceHealth(p);
         const iconHtml = `
-            <div class="marker-pin glass" style="background: rgba(13, 17, 30, 0.7); border-color: ${health.hexColor}44;">
-                <div class="marker-pulse ${health.colorClass}"></div>
-                <span style="color: ${health.hexColor}; font-size: 10px;">★</span>
+            <div class="marker-pin-spatial ${health.colorClass}">
+                <div class="spatial-dot"></div>
             </div>
         `;
 
         const customIcon = L.divIcon({
             html: iconHtml,
-            className: 'pulse-marker',
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
+            className: 'spatial-marker-icon',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
         });
 
         if (markers[p.id]) {
@@ -268,410 +211,289 @@ function updateMarkers() {
 
 function selectPlace(id) {
     selectedPlaceId = id;
-    updateUI();
-    updateSDKPayloadViewer();
+    const p = places.find(item => item.id === id);
+    if (!p) return;
+
+    // Pan map smoothly to place
+    map.panTo([p.lat, p.lng]);
+    
+    // Close other sheets
+    closeAllSheets();
+    
+    // Load content and slide up place sheet
+    updatePlaceSheetDetails();
+    document.getElementById('place-sheet').classList.add('active');
+    
+    // Set active tab on dock
+    setDockActive('nav-search');
 }
 
-function updateSDKPayloadViewer() {
+function updatePlaceSheetDetails() {
     const p = places.find(item => item.id === selectedPlaceId);
     if (!p) return;
 
     const health = getPlaceHealth(p);
-
-    const payload = {
-        "place_id": p.id,
-        "name": p.name,
-        "category": p.category,
-        "health": {
-            "status": health.statusLabel,
-            "description": health.desc,
-            "confidence_score": Math.round(p.confidence)
-        },
-        "now": p.capabilities,
-        "recent": p.timeline,
-        "usually": {
-            "reliability_30_days": p.memoryStats.reliability,
-            "patterns": p.patterns
-        },
-        "memory_stats": p.memoryStats,
-        "connected_graph": p.connections.map(c => {
-            const reg = graphRegistry[c.targetId] || {};
-            return {
-                "name": c.name,
-                "category": c.category,
-                "live_status": reg.status || "UNKNOWN"
-            };
-        })
-    };
-
-    document.getElementById('sdk-payload-code').textContent = JSON.stringify(payload, null, 2);
-}
-
-function updateUI() {
-    const feed = document.getElementById('reports-feed');
-    const activeCountSpan = document.getElementById('stat-active-count');
+    const contentArea = document.getElementById('sheet-content-area');
     
-    activeCountSpan.textContent = places.length;
-
-    feed.innerHTML = places.map(p => {
-        const health = getPlaceHealth(p);
-        const opacity = Math.max(0.4, p.confidence / 100);
-        const isSelected = selectedPlaceId === p.id ? 'selected' : '';
-        
-        // NOW section
-        let nowHtml = `<div style="margin-bottom: 8px;">`;
-        Object.keys(p.capabilities).forEach(key => {
-            const val = p.capabilities[key];
-            if (val) nowHtml += ` • <strong>${val}</strong>`;
-        });
-        nowHtml += `</div>`;
-
-        // RECENT timeline
-        let recentHtml = `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; border-left: 2px solid var(--primary); padding-left: 8px;">`;
-        p.timeline.slice(0, 3).forEach(t => {
-            recentHtml += `<strong>${t.time}</strong> — ${t.text}<br/>`;
-        });
-        recentHtml += `</div>`;
-
-        // USUALLY
-        let usuallyHtml = `<div style="font-size: 11px; margin-bottom: 8px;">`;
-        usuallyHtml += `Reliability: <span class="fact-yes">${p.memoryStats.reliability}</span><br/>`;
-        p.patterns.forEach(pat => {
-            usuallyHtml += `• ${pat}<br/>`;
-        });
-        usuallyHtml += `</div>`;
-
-        // Place Memory Stats card
-        let memoryHtml = `
-            <div class="place-memory-box">
-                <div style="font-weight:700; color: var(--text-secondary); text-transform:uppercase; font-size: 8px; margin-bottom: 4px;">Universal Place Memory</div>
-                ⚡ <strong>${p.memoryStats.totalUpdates}</strong> confirmations this month • 📅 Open <strong>${p.memoryStats.activeDays}</strong> Days • ⏰ Peak: <strong>${p.memoryStats.peakCrowdTime}</strong>
+    let nowHtml = "";
+    Object.keys(p.capabilities).forEach(key => {
+        nowHtml += `
+            <div class="capability-row">
+                <span>${key.toUpperCase()}</span>
+                <strong>${p.capabilities[key]}</strong>
             </div>
         `;
+    });
 
-        // Connected graph relations
-        let connectionsHtml = "";
-        if (p.connections && p.connections.length > 0) {
-            connectionsHtml += `<div class="relations-title">Neighborhood Context</div><div class="relations-grid">`;
-            p.connections.forEach(c => {
-                const reg = graphRegistry[c.targetId] || { status: "UNKNOWN" };
-                connectionsHtml += `
-                    <div class="relation-chip">
-                        <span>🔗</span>
-                        <div>
-                            <strong>${c.name}</strong>
-                            <div style="font-size: 8px; color: var(--accent);">${reg.status}</div>
-                        </div>
-                    </div>
-                `;
-            });
-            connectionsHtml += `</div>`;
-        }
+    let recentHtml = "";
+    p.timeline.slice(0, 3).forEach(item => {
+        recentHtml += `• ${item.time} — ${item.text}<br/>`;
+    });
 
-        // Checklist for Update Status (Limit max 4 options checklist)
-        const options = updateOptions[p.category] || ["Closed", "Offline"];
-        const checkboxesHtml = options.slice(0, 4).map((opt) => `
-            <label class="checkbox-row">
-                <input type="checkbox" name="corrections" value="${opt}">
-                <span>${opt}</span>
-            </label>
-        `).join('');
+    let usuallyHtml = `• Reliability: ${p.memoryStats.reliability}<br/>`;
+    p.patterns.forEach(pat => {
+        usuallyHtml += `• ${pat}<br/>`;
+    });
 
-        return `
-            <div class="report-card ${isSelected}" id="card-${p.id}" onclick="selectPlace('${p.id}')" style="opacity: ${opacity}">
-                <div class="card-header">
-                    <span class="category-tag">${p.category} — ${p.name}</span>
-                    <div class="confidence-indicator">
-                        <span class="confidence-dot ${health.colorClass}"></span>
-                        <span>${health.badge}</span>
-                    </div>
-                </div>
+    const formOptions = updateOptions[p.category] || ["Offline", "Closed"];
+    const optionsHtml = formOptions.map(opt => `
+        <div class="form-option-row">
+            <input type="checkbox" name="corrections" value="${opt}" id="chk-${opt}">
+            <label for="chk-${opt}">${opt}</label>
+        </div>
+    `).join('');
 
-                <!-- Place Health Header -->
-                <div style="margin: 8px 0; padding: 12px; background: rgba(255,255,255,0.01); border-radius: 12px; border-left: 2px solid ${health.hexColor}; border: 1px solid rgba(255,255,255,0.02);">
-                    <div style="font-weight: 700; font-size: 13px; color: ${health.hexColor};">${health.statusLabel}</div>
-                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">${health.desc}</div>
-                </div>
-
-                <!-- Stale Data Handling -->
-                ${health.isStale ? `
-                    <div style="padding: 16px; border: 1px dashed rgba(255,255,255,0.06); border-radius: 12px; text-align: center; font-size: 11px; margin: 12px 0; color: var(--text-secondary);">
-                        No recent updates. Tapping looks good helps keep this place healthy.
-                    </div>
-                ` : `
-                    <div class="section-title">NOW</div>
-                    ${nowHtml}
-
-                    <div class="section-title">RECENT</div>
-                    ${recentHtml}
-
-                    <div class="section-title">USUALLY</div>
-                    ${usuallyHtml}
-                `}
-
-                ${memoryHtml}
-                ${connectionsHtml}
-
-
-
-                <!-- Definitive Verification Flow -->
-                <div class="verification-core-box">
-                    <span class="verification-heading">Is this still accurate?</span>
-                    <!-- Centered Large Green Glass button -->
-                    <button class="looks-good-btn" onclick="verifyLooksGood('${p.id}', event)">✓ Looks Good</button>
-                    <!-- Subtle "Something changed?" links -->
-                    <button class="update-status-link" onclick="toggleCorrectionConsole('${p.id}', event)">Something changed?</button>
-                    
-                    <!-- Reality check list editor -->
-                    <div class="reality-check-console" id="editor-${p.id}">
-                        <div style="font-weight:700; font-size: 9px; margin-bottom: 6px; color: var(--state-issue); letter-spacing: 0.5px;">SELECT WHAT CHANGED:</div>
-                        ${checkboxesHtml}
-                        <label class="checkbox-row">
-                            <input type="checkbox" id="chk-other-${p.id}" onchange="toggleOtherText('${p.id}')">
-                            <span>Other</span>
-                        </label>
-                        <input type="text" id="txt-other-${p.id}" class="other-note-input" placeholder="Optional details (max 100 chars)" maxlength="100" style="display:none;">
-                        <button class="submit-corrections-btn" onclick="submitCorrections('${p.id}', event)">Submit corrections</button>
-                    </div>
-                </div>
+    contentArea.innerHTML = `
+        <div class="place-sheet-header">
+            <div class="place-title-section">
+                <h2>${p.name}</h2>
+                <div class="place-category-pill">${p.category}</div>
             </div>
-        `;
-    }).join('');
+            <div class="status-badge-hero ${health.badgeClass}">
+                ● ${health.statusLabel}
+            </div>
+        </div>
 
-    updateMarkers();
+        <div class="capabilities-list">
+            ${nowHtml}
+        </div>
+
+        <button class="looks-good-btn-large" onclick="triggerLooksGood('${p.id}', event)">✓ Looks Good</button>
+        <button class="something-changed-link" onclick="toggleCorrectionsForm(event)">Something changed?</button>
+
+        <div class="corrections-form-sheet" id="corrections-console">
+            <h4 style="font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.5px; margin-bottom: 12px; text-transform: uppercase;">Specify what changed</h4>
+            ${optionsHtml}
+            <input type="text" class="form-text-input" id="other-correction-txt" placeholder="Optional details (max 100 chars)" maxlength="100">
+            <button class="btn-form-submit" onclick="submitCorrections('${p.id}', event)">Submit updates</button>
+        </div>
+
+        <div class="sheet-divider"></div>
+
+        <div class="collapsible-section" id="section-recent">
+            <button class="collapsible-trigger" onclick="toggleCollapsible('section-recent')">
+                <span>RECENT HISTORY</span>
+                <span>▾</span>
+            </button>
+            <div class="collapsible-content">
+                ${recentHtml || "No recent verification logs."}
+            </div>
+        </div>
+
+        <div class="collapsible-section" id="section-usually">
+            <button class="collapsible-trigger" onclick="toggleCollapsible('section-usually')">
+                <span>MEMORIES & PATTERNS</span>
+                <span>▾</span>
+            </button>
+            <div class="collapsible-content">
+                ${usuallyHtml}
+            </div>
+        </div>
+    `;
 }
 
-function verifyLooksGood(id, event) {
+function triggerLooksGood(id, event) {
     if (event) event.stopPropagation();
+    const p = places.find(item => item.id === id);
+    if (!p) return;
 
-    const place = places.find(p => p.id === id);
-    if (!place) return;
+    p.confidence = 100.0;
+    p.lastVerified = Date.now();
 
-    place.confidence = 100.0;
-    place.lastVerified = Date.now();
-
-    // Reward Verity Signal instead of XP
+    // Pulse signal score and show soft vibration visual
     veritySignal += 10;
-    document.getElementById('user-truth-score').textContent = `◉ ${veritySignal.toLocaleString()} Signal`;
+    updateOdometer("profile-signal-val", veritySignal);
+    
+    // Add micro haptic haptic feedback simulation visual on screen
+    triggerVisualPulse();
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    place.timeline.unshift({ time: timeStr, text: "Verified active state", positive: true });
-    place.memoryStats.totalUpdates += 1;
+    p.timeline.unshift({ time: timeStr, text: "Verified looks good", positive: true });
+    p.memoryStats.totalUpdates += 1;
 
-    updateUI();
-    updateSDKPayloadViewer();
+    updatePlaceSheetDetails();
+    renderAllMarkers();
 }
 
-function toggleCorrectionConsole(id, event) {
+function toggleCorrectionsForm(event) {
     if (event) event.stopPropagation();
-    const card = document.getElementById(`card-${id}`);
-    if (card) {
-        card.classList.toggle('editor-open');
-    }
-}
-
-function toggleOtherText(id) {
-    const chk = document.getElementById(`chk-other-${id}`);
-    const txt = document.getElementById(`txt-other-${id}`);
-    txt.style.display = chk.checked ? 'block' : 'none';
+    const form = document.getElementById('corrections-console');
+    form.classList.toggle('active');
 }
 
 function submitCorrections(id, event) {
     if (event) event.stopPropagation();
+    const p = places.find(item => item.id === id);
+    if (!p) return;
 
-    const place = places.find(p => p.id === id);
-    if (!place) return;
+    const checkedOptions = Array.from(document.querySelectorAll('input[name="corrections"]:checked')).map(el => el.value);
+    const customTxt = document.getElementById('other-correction-txt').value.trim();
 
-    const editor = document.getElementById(`editor-${id}`);
-    const selectedCheckboxes = editor.querySelectorAll('input[name="corrections"]:checked');
-    const chkOther = document.getElementById(`chk-other-${id}`);
-    const txtOther = document.getElementById(`txt-other-${id}`);
-
-    let changes = [];
-    selectedCheckboxes.forEach(cb => {
-        changes.push(cb.value);
-        if (cb.value.includes("WiFi")) place.capabilities.wifi = "WiFi Offline";
-        if (cb.value.includes("Seats")) place.capabilities.capacity = "No Seats";
-        if (cb.value.includes("Closed")) place.capabilities.operational = "CLOSED";
-        if (cb.value.includes("Out of Cash")) place.capabilities.capacity = "No Cash";
-    });
-
-    if (chkOther.checked && txtOther.value.trim() !== "") {
-        changes.push(txtOther.value.trim());
-    }
-
-    if (changes.length === 0) {
-        alert("Please select at least one status option.");
+    if (checkedOptions.length === 0 && !customTxt) {
         return;
     }
 
-    place.confidence = 100.0;
-    place.lastVerified = Date.now();
+    p.confidence = 90.0; // Needs confirmation verification
+    p.lastVerified = Date.now();
 
-    // Verified Correction rewards 25 Signal
+    checkedOptions.forEach(opt => {
+        if (opt.includes("WiFi") || opt.includes("offline")) p.capabilities.wifi = "WiFi Down";
+        if (opt.includes("Seats") || opt.includes("No Seats")) p.capabilities.seats = "No Seats Available";
+        if (opt.includes("Closed")) p.capabilities.operational = "CLOSED";
+    });
+
     veritySignal += 25;
-    document.getElementById('user-truth-score').textContent = `◉ ${veritySignal.toLocaleString()} Signal`;
+    updateOdometer("profile-signal-val", veritySignal);
+    triggerVisualPulse();
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    place.timeline.unshift({ time: timeStr, text: `Corrected: ${changes.join(', ')}`, positive: false });
-    place.memoryStats.totalUpdates += 1;
+    p.timeline.unshift({ time: timeStr, text: `Corrected: ${checkedOptions.join(', ')}`, positive: false });
+    p.memoryStats.totalUpdates += 1;
 
-    const card = document.getElementById(`card-${id}`);
-    if (card) card.classList.remove('editor-open');
-
-    updateUI();
-    updateSDKPayloadViewer();
+    updatePlaceSheetDetails();
+    renderAllMarkers();
 }
 
-// Exit Simulation uses rotated weekly titles with clean impact summaries
-function triggerExitSimulation() {
-    const banner = document.getElementById('passive-verification-banner');
-    const text = document.getElementById('passive-banner-text');
+function toggleCollapsible(id) {
+    const el = document.getElementById(id);
+    el.classList.toggle('open');
+}
 
-    currentTitleIndex = (currentTitleIndex + 1) % weeklyTitles.length;
-    const title = weeklyTitles[currentTitleIndex];
+// --- DOCK NAVIGATION FLOW ---
+function handleDockNav(tab) {
+    closeAllSheets();
+    setDockActive(`nav-${tab}`);
 
-    text.innerHTML = `
-        <div style="font-size:9px; font-weight:700; color:var(--state-healthy); letter-spacing: 0.5px; text-transform: uppercase;">${title}</div>
-        <strong>SF International Airport: Everything still looks right?</strong>
-    `;
+    if (tab === 'profile') {
+        document.getElementById('profile-sheet').classList.add('active');
+    } else if (tab === 'leaderboard') {
+        document.getElementById('leaderboard-panel').classList.add('active');
+    } else if (tab === 'search') {
+        // Scroll to search or focus
+        document.getElementById('conversational-search').focus();
+    } else if (tab === 'feed') {
+        // Feed returns view to SFO (default)
+        selectPlace("p1");
+    }
+}
+
+function toggleProfileSheet() {
+    document.getElementById('profile-sheet').classList.remove('active');
+    setDockActive('nav-feed');
+}
+
+function closeAllSheets() {
+    document.getElementById('place-sheet').classList.remove('active');
+    document.getElementById('profile-sheet').classList.remove('active');
+    document.getElementById('leaderboard-panel').classList.remove('active');
+}
+
+function setDockActive(id) {
+    document.querySelectorAll('.dock-nav-item').forEach(el => el.classList.remove('active'));
+    const item = document.getElementById(id);
+    if (item) item.classList.add('active');
+}
+
+// --- DYNAMIC ISLAND NOTIFICATION & SIMULATION ---
+function triggerGeofenceExit() {
+    const island = document.getElementById('dynamic-island');
+    island.className = "dynamic-island-expanded";
     
+    // Map moves to SFO (SFO is the place for verification)
     map.panTo([37.7833, -122.4167]);
     selectPlace("p2");
-
-    banner.style.display = 'flex';
 }
 
-function respondPassiveVerify(isPositive) {
-    const banner = document.getElementById('passive-verification-banner');
-    banner.style.display = 'none';
+function expandDynamicIsland() {
+    const island = document.getElementById('dynamic-island');
+    if (island.classList.contains('dynamic-island-collapsed')) {
+        island.className = "dynamic-island-expanded";
+    }
+}
 
-    const place = places.find(p => p.id === "p2");
-    if (!place) return;
+function dismissDynamicIsland(event) {
+    if (event) event.stopPropagation();
+    const island = document.getElementById('dynamic-island');
+    island.className = "dynamic-island-collapsed";
+}
 
-    place.confidence = isPositive ? 100.0 : Math.max(0, place.confidence - 30.0);
-    place.lastVerified = Date.now();
+function openWeeklyReflection(event) {
+    if (event) event.stopPropagation();
+    dismissDynamicIsland();
+    document.getElementById('reflection-modal').classList.add('active');
+}
 
-    veritySignal += 10;
-    document.getElementById('user-truth-score').textContent = `◉ ${veritySignal.toLocaleString()} Signal`;
+function closeWeeklyReflection() {
+    document.getElementById('reflection-modal').classList.remove('active');
+}
 
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    place.timeline.unshift({ time: timeStr, text: isPositive ? "Verified SFO status on Geofence exit" : "Exited SFO: changes reported", positive: isPositive });
+// --- LEADERBOARD SCOPE SWAPPING ---
+function switchLeaderboardScope(scope) {
+    document.querySelectorAll('.scope-tab').forEach(el => el.classList.remove('active'));
+    event.target.classList.add('active');
+    renderLeaderboard(scope);
+}
+
+function renderLeaderboard(scope) {
+    const container = document.getElementById('leaderboard-entries');
     
-    updateUI();
-    updateSDKPayloadViewer();
-}
-
-function searchQuery(txt) {
-    document.getElementById('conversational-search').value = txt;
-    triggerSearch();
-}
-
-// Render Civic Leaderboard with prestige Glass Rings
-function renderLeaderboard() {
-    const ranksList = document.getElementById('leaderboard-list');
-    if (!ranksList) return;
-
-    // Sort mock data
-    leaderboardData.sort((a, b) => b.signal - a.signal);
-
-    ranksList.innerHTML = leaderboardData.map(user => {
+    // Sort or modify data by scope simulated values
+    let scopeData = [...leaderboardData];
+    if (scope === 'Nearby') {
+        scopeData = scopeData.filter(item => item.rank > 1);
+    }
+    
+    container.innerHTML = scopeData.map(user => {
         const ringClass = `avatar-ring${user.ring}`;
+        const isSelf = user.name === "dhiv_sentinel" ? "highlighted" : "";
         return `
-            <div class="leaderboard-row">
+            <div class="leaderboard-row ${isSelf}">
                 <div class="leaderboard-left">
                     <span class="leaderboard-rank">#${user.rank}</span>
-                    <div class="${ringClass}" style="width: 32px; height: 32px;">
-                        <div class="avatar" style="background: rgba(255,255,255,0.05); width: 26px; height: 26px; border-radius: 50%; font-size: 8px; font-weight: bold; display: flex; align-items: center; justify-content: center; color: #fff;">
+                    <div class="${ringClass}" style="width: 32px; height: 32px; display:flex; align-items:center; justify-content:center;">
+                        <div style="background: rgba(255,255,255,0.06); width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700;">
                             ${user.name.substring(0, 2).toUpperCase()}
                         </div>
                     </div>
                     <div>
-                        <strong style="display: block;">@${user.name}</strong>
-                        <span style="font-size: 9px; color: var(--text-tertiary);">${user.level}</span>
+                        <strong>@${user.name}</strong>
+                        <span style="display:block; font-size:9px; color:var(--text-tertiary);">${user.level}</span>
                     </div>
                 </div>
                 <div class="leaderboard-right">
                     <strong>◉ ${user.signal.toLocaleString()}</strong>
-                    <div style="font-size: 8px; color: var(--text-tertiary);">Signal</div>
                 </div>
             </div>
         `;
     }).join('');
 }
 
-// Tab switcher logic for sidebar panels
-function switchSidebarTab(panelName, element) {
-    // 1. Hide all panels
-    const panels = document.querySelectorAll('.sidebar-panel-content');
-    panels.forEach(p => p.style.display = 'none');
-
-    // 2. Show selected panel
-    const selectedPanel = document.getElementById(`panel-${panelName}`);
-    if (selectedPanel) selectedPanel.style.display = 'block';
-
-    // 3. Set active classes on dock icons
-    const dockItems = document.querySelectorAll('.dock-item');
-    dockItems.forEach(item => item.classList.remove('active'));
-    if (element) {
-        element.classList.add('active');
+// --- SEARCH ENGINE INTERFACE ---
+function searchCategory(cat) {
+    const target = places.find(p => p.category === cat);
+    if (target) {
+        selectPlace(target.id);
     }
-}
-
-function quickReport(category) {
-    const names = {
-        "ATM Cash": "Hub ATM",
-        "ATM Offline": "Hub ATM",
-        "Flood": "East Expressway Link",
-        "Power Outage": "Sub-Station 4"
-    };
-
-    const newPlace = {
-        id: 'p_' + Date.now(),
-        name: names[category] || "New Spot Hub",
-        category: category.includes("ATM") ? "ATM" : category,
-        locationDesc: "Registered near coordinates",
-        lat: 37.7749 + (Math.random() - 0.5) * 0.01,
-        lng: -122.4194 + (Math.random() - 0.5) * 0.01,
-        confidence: 100,
-        lastVerified: Date.now(),
-        halfLife: 45,
-        capabilities: {
-            operational: category.includes("Offline") || category.includes("Outage") ? "OFFLINE" : "RUNNING_NORMALLY",
-            capacity: "AVAILABLE"
-        },
-        memoryStats: {
-            reliability: "100% reliable",
-            totalUpdates: 1,
-            activeDays: 1,
-            peakCrowdTime: "12:00 PM"
-        },
-        patterns: ["Pattern learning active"],
-        timeline: [
-            { time: "Just Now", text: "Asset state initialized", positive: true }
-        ],
-        connections: []
-    };
-
-    places.push(newPlace);
-    selectedPlaceId = newPlace.id;
-
-    // Fresh Place Check rewards 15 Signal
-    veritySignal += 15;
-    document.getElementById('user-truth-score').textContent = `◉ ${veritySignal.toLocaleString()} Signal`;
-
-    updateUI();
-    updateSDKPayloadViewer();
-}
-
-function updateLivePulseHeader() {
-    const pulseBadge = document.querySelector('.pulse-status-badge');
-    const pulseSummary = document.querySelector('.pulse-summary');
-
-    pulseBadge.textContent = "🟢 Everything Normal";
-    pulseBadge.style.color = "var(--state-healthy)";
-    pulseBadge.style.background = "rgba(16, 185, 129, 0.06)";
-    pulseSummary.textContent = "SF Grid infrastructure stable • Recent checks confirmed all capabilities operational.";
 }
 
 function handleSearch(event) {
@@ -681,40 +503,37 @@ function handleSearch(event) {
 }
 
 function triggerSearch() {
-    const query = document.getElementById('conversational-search').value.toLowerCase().trim();
+    const input = document.getElementById('conversational-search');
+    const query = input.value.toLowerCase().trim();
     if (!query) return;
 
     const responseBox = document.getElementById('search-response-box');
     const responseText = document.getElementById('search-response-text');
 
     let answer = "";
-
-    if (query.includes('sfo') || query.includes('airport') || query.includes('terminal')) {
-        const parent = places.find(p => p.category === 'Airport');
+    if (query.includes('cafe') || query.includes('brew') || query.includes('coffee')) {
+        const cafe = places.find(p => p.id === 'p1');
         answer = `
-            <strong>SF International Airport Status</strong><br/>
-            ✓ Terminal: <strong>${parent.capabilities.operational}</strong><br/>
-            • Taxi wait time: <strong>4 min</strong><br/>
-            • Metro train: <strong>Running</strong><br/>
-            • Gate ATMs: <strong>3 dispensing cash</strong>
+            <strong>Brew Cafe:</strong> Status is 🟢 <strong>${cafe.capabilities.operational}</strong>. 
+            WiFi is <strong>working</strong> and there are <strong>seats available</strong>.
         `;
-    } else if (query.includes('cafe') || query.includes('coffee') || query.includes('crowd')) {
-        const cafe = places.find(p => p.category === 'Cafe');
+        selectPlace('p1');
+    } else if (query.includes('airport') || query.includes('sfo')) {
+        const apt = places.find(p => p.id === 'p2');
         answer = `
-            <strong>Brew Cafe Live State:</strong><br/>
-            • Seating: <strong class="fact-yes">${cafe.capabilities.capacity}</strong><br/>
-            • WiFi: <strong>${cafe.capabilities.wifi}</strong><br/>
-            • Pattern: <em>Usually crowded after 6 PM</em>
+            <strong>SF International Airport:</strong> Terminal state is 🟢 <strong>${apt.capabilities.operational}</strong>. 
+            Taxi Queue: <strong>Low wait times</strong>.
         `;
-    } else if (query.includes('hospital') || query.includes('er') || query.includes('wait')) {
-        const hosp = places.find(p => p.category === 'Hospital');
+        selectPlace('p2');
+    } else if (query.includes('hospital') || query.includes('er')) {
+        const hosp = places.find(p => p.id === 'p3');
         answer = `
-            <strong>City Hospital ER Live State:</strong><br/>
-            • Status: <strong class="fact-yes">${hosp.capabilities.operational}</strong><br/>
-            • Wait time: <strong>${hosp.capabilities.capacity}</strong>
-        `;
+            <strong>City Hospital ER:</strong> Status is 🟢 <strong>${hosp.capabilities.operational}</strong>. 
+            Waiting: <strong>&lt; 20 min wait time</strong>.
+        />`;
+        selectPlace('p3');
     } else {
-        answer = `Scanned local graph. Try asking: <em>"Is SFO terminal running?"</em> or <em>"Is the cafe crowded?"</em>.`;
+        answer = `Scanned living graph. No active events matching "${query}". Try searching "Is SFO terminal running?"`;
     }
 
     responseText.innerHTML = answer;
@@ -726,65 +545,36 @@ function clearSearch() {
     document.getElementById('search-response-box').style.display = 'none';
 }
 
-function openReportModal(lat, lng) {
-    pendingLat = lat;
-    pendingLng = lng;
-    document.getElementById('report-modal').classList.add('open');
-}
+// --- UTILITY EFFECTS & MICRO-HAPTICS ---
+function updateOdometer(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    
+    let currentVal = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    const diff = value - currentVal;
+    if (diff === 0) return;
 
-function closeReportModal() {
-    document.getElementById('report-modal').classList.remove('open');
-}
+    const steps = 15;
+    const stepVal = diff / steps;
+    let stepCount = 0;
 
-function setupEvents() {
-    document.getElementById('btn-report-truth').addEventListener('click', () => {
-        openReportModal(37.7749 + (Math.random() - 0.5) * 0.02, -122.4194 + (Math.random() - 0.5) * 0.02);
-    });
-
-    document.getElementById('new-report-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const cat = document.getElementById('report-category').value;
-        const name = document.getElementById('report-note').value;
-
-        const newPlace = {
-            id: 'p_' + Date.now(),
-            name: name,
-            category: cat,
-            locationDesc: "Registered custom node",
-            lat: pendingLat,
-            lng: pendingLng,
-            confidence: 100,
-            lastVerified: Date.now(),
-            halfLife: 45,
-            capabilities: {
-                operational: "OPEN",
-                capacity: "AVAILABLE"
-            },
-            memoryStats: {
-                reliability: "100% reliable",
-                totalUpdates: 1,
-                activeDays: 1,
-                peakCrowdTime: "3:00 PM"
-            },
-            patterns: ["Learning patterns..."],
-            timeline: [
-                { time: "Just Now", text: `Registered ${name}`, positive: true }
-            ],
-            connections: []
-        };
-
-        places.push(newPlace);
-        selectedPlaceId = newPlace.id;
-        closeReportModal();
+    const interval = setInterval(() => {
+        stepCount++;
+        currentVal += stepVal;
+        el.textContent = Math.round(currentVal).toLocaleString();
         
-        map.panTo([pendingLat, pendingLng]);
-        renderAll();
-        document.getElementById('new-report-form').reset();
-    });
+        if (stepCount >= steps) {
+            clearInterval(interval);
+            el.textContent = value.toLocaleString();
+        }
+    }, 20);
 }
 
-function renderAll() {
-    updateUI();
-    updateSDKPayloadViewer();
-    updateLivePulseHeader();
+function triggerVisualPulse() {
+    // Add visual haptic flash to main viewport
+    const container = document.body;
+    container.style.boxShadow = "inset 0 0 20px rgba(34, 211, 238, 0.15)";
+    setTimeout(() => {
+        container.style.boxShadow = "none";
+    }, 300);
 }
